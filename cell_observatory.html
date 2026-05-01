@@ -1,0 +1,916 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>活细胞动态观测仪</title>
+    <script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.0/dist/chart.umd.min.js"></script>
+    <style>
+        * {
+            margin: 0;
+            padding: 0;
+            box-sizing: border-box;
+        }
+
+        body {
+            font-family: 'Microsoft YaHei', Arial, sans-serif;
+            background: linear-gradient(135deg, #1a1a2e 0%, #16213e 100%);
+            color: #fff;
+            min-height: 100vh;
+            padding: 20px;
+        }
+
+        .container {
+            max-width: 1400px;
+            margin: 0 auto;
+        }
+
+        h1 {
+            text-align: center;
+            margin-bottom: 30px;
+            font-size: 2.5em;
+            text-shadow: 0 0 20px rgba(100, 200, 255, 0.5);
+        }
+
+        .main-content {
+            display: grid;
+            grid-template-columns: 1fr 400px;
+            gap: 30px;
+        }
+
+        .video-section {
+            background: rgba(0, 0, 0, 0.5);
+            border-radius: 15px;
+            padding: 20px;
+            box-shadow: 0 8px 32px rgba(0, 0, 0, 0.3);
+        }
+
+        .video-container {
+            width: 100%;
+            aspect-ratio: 16/9;
+            background: #000;
+            border-radius: 10px;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            overflow: hidden;
+            border: 2px solid #3498db;
+            position: relative;
+        }
+
+        .video-container img {
+            width: 100%;
+            height: 100%;
+            object-fit: contain;
+        }
+
+        .video-placeholder {
+            color: #666;
+            font-size: 1.2em;
+            text-align: center;
+        }
+
+        .connection-status {
+            position: absolute;
+            top: 10px;
+            right: 10px;
+            padding: 5px 12px;
+            border-radius: 20px;
+            font-size: 0.85em;
+            font-weight: bold;
+        }
+
+        .connection-status.connected {
+            background: #2ecc71;
+        }
+
+        .connection-status.disconnected {
+            background: #e74c3c;
+        }
+
+        .connection-status.connecting {
+            background: #f39c12;
+            animation: pulse 1s infinite;
+        }
+
+        @keyframes pulse {
+            0%, 100% { opacity: 1; }
+            50% { opacity: 0.5; }
+        }
+
+        .control-panel {
+            background: rgba(0, 0, 0, 0.5);
+            border-radius: 15px;
+            padding: 25px;
+            box-shadow: 0 8px 32px rgba(0, 0, 0, 0.3);
+        }
+
+        .control-section {
+            margin-bottom: 30px;
+        }
+
+        .control-section h3 {
+            margin-bottom: 15px;
+            color: #3498db;
+            font-size: 1.2em;
+            border-bottom: 2px solid #3498db;
+            padding-bottom: 8px;
+        }
+
+        .switch-container {
+            display: flex;
+            justify-content: space-between;
+            margin-bottom: 20px;
+        }
+
+        .switch-wrapper {
+            text-align: center;
+        }
+
+        .switch-label {
+            display: block;
+            margin-bottom: 10px;
+            font-size: 0.9em;
+        }
+
+        .switch {
+            position: relative;
+            display: inline-block;
+            width: 70px;
+            height: 36px;
+        }
+
+        .switch input {
+            opacity: 0;
+            width: 0;
+            height: 0;
+        }
+
+        .slider {
+            position: absolute;
+            cursor: pointer;
+            top: 0;
+            left: 0;
+            right: 0;
+            bottom: 0;
+            background-color: #444;
+            transition: 0.4s;
+            border-radius: 36px;
+        }
+
+        .slider:before {
+            position: absolute;
+            content: "";
+            height: 28px;
+            width: 28px;
+            left: 4px;
+            bottom: 4px;
+            background-color: white;
+            transition: 0.4s;
+            border-radius: 50%;
+        }
+
+        input:checked + .slider {
+            background-color: #2ecc71;
+        }
+
+        input:checked + .slider.fluorescent {
+            background-color: #9b59b6;
+        }
+
+        input:checked + .slider.brightfield {
+            background-color: #f39c12;
+        }
+
+        input:checked + .slider:before {
+            transform: translateX(34px);
+        }
+
+        .slider-container {
+            margin-bottom: 20px;
+        }
+
+        .slider-label {
+            display: flex;
+            justify-content: space-between;
+            margin-bottom: 8px;
+            font-size: 0.9em;
+        }
+
+        input[type="range"] {
+            width: 100%;
+            height: 8px;
+            border-radius: 4px;
+            background: #444;
+            outline: none;
+            -webkit-appearance: none;
+        }
+
+        input[type="range"]::-webkit-slider-thumb {
+            -webkit-appearance: none;
+            appearance: none;
+            width: 20px;
+            height: 20px;
+            border-radius: 50%;
+            background: #3498db;
+            cursor: pointer;
+            box-shadow: 0 0 10px rgba(52, 152, 219, 0.5);
+        }
+
+        input[type="range"].fluorescent::-webkit-slider-thumb {
+            background: #9b59b6;
+            box-shadow: 0 0 10px rgba(155, 89, 182, 0.5);
+        }
+
+        input[type="range"].brightfield::-webkit-slider-thumb {
+            background: #f39c12;
+            box-shadow: 0 0 10px rgba(243, 156, 18, 0.5);
+        }
+
+        .focus-controls {
+            display: flex;
+            flex-direction: column;
+            gap: 15px;
+        }
+
+        .focus-btn {
+            padding: 15px;
+            font-size: 1.1em;
+            border: none;
+            border-radius: 10px;
+            cursor: pointer;
+            transition: all 0.3s;
+            background: linear-gradient(135deg, #3498db 0%, #2980b9 100%);
+            color: white;
+            font-weight: bold;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            gap: 10px;
+        }
+
+        .focus-btn:hover {
+            transform: translateY(-2px);
+            box-shadow: 0 5px 20px rgba(52, 152, 219, 0.4);
+        }
+
+        .focus-btn:active {
+            transform: translateY(0);
+        }
+
+        .focus-btn.up {
+            background: linear-gradient(135deg, #2ecc71 0%, #27ae60 100%);
+        }
+
+        .focus-btn.up:hover {
+            box-shadow: 0 5px 20px rgba(46, 204, 113, 0.4);
+        }
+
+        .focus-btn.down {
+            background: linear-gradient(135deg, #e74c3c 0%, #c0392b 100%);
+        }
+
+        .focus-btn.down:hover {
+            box-shadow: 0 5px 20px rgba(231, 76, 60, 0.4);
+        }
+
+        .status-display {
+            margin-top: 20px;
+            padding: 15px;
+            background: rgba(0, 0, 0, 0.3);
+            border-radius: 10px;
+            font-size: 0.9em;
+        }
+
+        .status-item {
+            display: flex;
+            justify-content: space-between;
+            margin-bottom: 8px;
+        }
+
+        .status-item:last-child {
+            margin-bottom: 0;
+        }
+
+        .status-value {
+            font-weight: bold;
+            color: #2ecc71;
+        }
+
+        .websocket-config {
+            margin-bottom: 20px;
+            padding: 15px;
+            background: rgba(0, 0, 0, 0.3);
+            border-radius: 10px;
+        }
+
+        .websocket-config input {
+            width: 100%;
+            padding: 10px;
+            border: 1px solid #444;
+            border-radius: 5px;
+            background: #333;
+            color: #fff;
+            font-size: 0.9em;
+            margin-bottom: 10px;
+        }
+
+        .websocket-config button {
+            width: 100%;
+            padding: 10px;
+            border: none;
+            border-radius: 5px;
+            background: #3498db;
+            color: white;
+            cursor: pointer;
+            font-size: 0.9em;
+            transition: background 0.3s;
+        }
+
+        .websocket-config button:hover {
+            background: #2980b9;
+        }
+
+        .stats-section {
+            margin-top: 20px;
+            background: rgba(0, 0, 0, 0.5);
+            border-radius: 15px;
+            padding: 25px;
+            box-shadow: 0 8px 32px rgba(0, 0, 0, 0.3);
+        }
+
+        .stats-section h3 {
+            margin-bottom: 20px;
+            color: #3498db;
+            font-size: 1.3em;
+            border-bottom: 2px solid #3498db;
+            padding-bottom: 10px;
+        }
+
+        .stats-container {
+            display: grid;
+            grid-template-columns: 1fr 2fr;
+            gap: 25px;
+        }
+
+        .stats-cards {
+            display: flex;
+            flex-direction: column;
+            gap: 15px;
+        }
+
+        .stat-card {
+            background: linear-gradient(135deg, rgba(52, 152, 219, 0.2) 0%, rgba(41, 128, 185, 0.1) 100%);
+            border-radius: 12px;
+            padding: 20px;
+            border: 1px solid rgba(52, 152, 219, 0.3);
+        }
+
+        .stat-card.green {
+            background: linear-gradient(135deg, rgba(46, 204, 113, 0.2) 0%, rgba(39, 174, 96, 0.1) 100%);
+            border-color: rgba(46, 204, 113, 0.3);
+        }
+
+        .stat-card.purple {
+            background: linear-gradient(135deg, rgba(155, 89, 182, 0.2) 0%, rgba(142, 68, 173, 0.1) 100%);
+            border-color: rgba(155, 89, 182, 0.3);
+        }
+
+        .stat-label {
+            font-size: 0.9em;
+            color: #aaa;
+            margin-bottom: 8px;
+        }
+
+        .stat-value {
+            font-size: 2.2em;
+            font-weight: bold;
+            color: #3498db;
+        }
+
+        .stat-card.green .stat-value {
+            color: #2ecc71;
+        }
+
+        .stat-card.purple .stat-value {
+            color: #9b59b6;
+        }
+
+        .stat-unit {
+            font-size: 0.8em;
+            color: #777;
+            margin-left: 5px;
+        }
+
+        .chart-container {
+            background: rgba(0, 0, 0, 0.3);
+            border-radius: 12px;
+            padding: 20px;
+            height: 100%;
+            min-height: 250px;
+        }
+
+        .chart-container canvas {
+            width: 100% !important;
+            height: 100% !important;
+        }
+
+        .stat-controls {
+            display: flex;
+            gap: 10px;
+            margin-top: 15px;
+        }
+
+        .stat-btn {
+            flex: 1;
+            padding: 10px 15px;
+            border: none;
+            border-radius: 8px;
+            background: rgba(52, 152, 219, 0.3);
+            color: #3498db;
+            cursor: pointer;
+            font-size: 0.9em;
+            transition: all 0.3s;
+        }
+
+        .stat-btn:hover {
+            background: rgba(52, 152, 219, 0.5);
+        }
+
+        .stat-btn.danger {
+            background: rgba(231, 76, 60, 0.3);
+            color: #e74c3c;
+        }
+
+        .stat-btn.danger:hover {
+            background: rgba(231, 76, 60, 0.5);
+        }
+
+        @media (max-width: 1024px) {
+            .main-content {
+                grid-template-columns: 1fr;
+            }
+            .stats-container {
+                grid-template-columns: 1fr;
+            }
+        }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <h1>🔬 活细胞动态观测仪</h1>
+        
+        <div class="main-content">
+            <div class="video-section">
+                <div class="video-container" id="videoContainer">
+                    <img id="cameraFeed" style="display: none;" alt="摄像头画面">
+                    <div class="video-placeholder" id="placeholder">
+                        <p>请配置WebSocket连接</p>
+                    </div>
+                    <div class="connection-status disconnected" id="connectionStatus">
+                        未连接
+                    </div>
+                </div>
+                
+                <div class="stats-section">
+                    <h3>📊 细胞数据统计</h3>
+                    <div class="stats-container">
+                        <div class="stats-cards">
+                            <div class="stat-card green">
+                                <div class="stat-label">当前细胞数量</div>
+                                <div class="stat-value" id="cellCount">0<span class="stat-unit">个</span></div>
+                            </div>
+                            <div class="stat-card">
+                                <div class="stat-label">平均细胞面积</div>
+                                <div class="stat-value" id="avgCellSize">0<span class="stat-unit">μm²</span></div>
+                            </div>
+                            <div class="stat-card purple">
+                                <div class="stat-label">细胞密度</div>
+                                <div class="stat-value" id="cellDensity">0<span class="stat-unit">个/mm²</span></div>
+                            </div>
+                            <div class="stat-controls">
+                                <button class="stat-btn" id="refreshStats">刷新数据</button>
+                                <button class="stat-btn danger" id="clearStats">清除记录</button>
+                            </div>
+                        </div>
+                        <div class="chart-container">
+                            <canvas id="growthChart"></canvas>
+                        </div>
+                    </div>
+                </div>
+            </div>
+
+            <div class="control-panel">
+                <div class="control-section">
+                    <h3>🔌 WebSocket 配置</h3>
+                    <div class="websocket-config">
+                        <input type="text" id="wsUrl" placeholder="WebSocket地址 (如 ws://192.168.1.100:8080)" value="ws://192.168.1.100:8080">
+                        <button id="connectBtn">连接</button>
+                    </div>
+                </div>
+
+                <div class="control-section">
+                    <h3>💡 LED 光源控制</h3>
+                    <div class="switch-container">
+                        <div class="switch-wrapper">
+                            <span class="switch-label">荧光LED</span>
+                            <label class="switch">
+                                <input type="checkbox" id="fluorescentSwitch">
+                                <span class="slider fluorescent"></span>
+                            </label>
+                        </div>
+                        <div class="switch-wrapper">
+                            <span class="switch-label">明场LED</span>
+                            <label class="switch">
+                                <input type="checkbox" id="brightfieldSwitch">
+                                <span class="slider brightfield"></span>
+                            </label>
+                        </div>
+                    </div>
+                </div>
+
+                <div class="control-section">
+                    <h3>🎚️ 亮度调节</h3>
+                    <div class="slider-container">
+                        <div class="slider-label">
+                            <span>荧光LED亮度</span>
+                            <span id="fluorescentValue">50%</span>
+                        </div>
+                        <input type="range" class="fluorescent" id="fluorescentSlider" min="0" max="100" value="50">
+                    </div>
+                    <div class="slider-container">
+                        <div class="slider-label">
+                            <span>明场LED亮度</span>
+                            <span id="brightfieldValue">50%</span>
+                        </div>
+                        <input type="range" class="brightfield" id="brightfieldSlider" min="0" max="100" value="50">
+                    </div>
+                </div>
+
+                <div class="control-section">
+                    <h3>🎯 对焦控制</h3>
+                    <div class="focus-controls">
+                        <button class="focus-btn up" id="focusUp">
+                            ▲ 向上对焦
+                        </button>
+                        <button class="focus-btn down" id="focusDown">
+                            ▼ 向下对焦
+                        </button>
+                    </div>
+                </div>
+
+                <div class="status-display">
+                    <div class="status-item">
+                        <span>荧光LED状态:</span>
+                        <span class="status-value" id="fluorescentStatus">关闭</span>
+                    </div>
+                    <div class="status-item">
+                        <span>明场LED状态:</span>
+                        <span class="status-value" id="brightfieldStatus">关闭</span>
+                    </div>
+                    <div class="status-item">
+                        <span>对焦位置:</span>
+                        <span class="status-value" id="focusPosition">0</span>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <script>
+        let focusPosition = 0;
+        let ws = null;
+        let growthChart = null;
+        let cellDataHistory = {
+            timestamps: [],
+            counts: [],
+            avgSizes: [],
+            densities: []
+        };
+
+        const fluorescentSwitch = document.getElementById('fluorescentSwitch');
+        const brightfieldSwitch = document.getElementById('brightfieldSwitch');
+        const fluorescentSlider = document.getElementById('fluorescentSlider');
+        const brightfieldSlider = document.getElementById('brightfieldSlider');
+        const fluorescentValue = document.getElementById('fluorescentValue');
+        const brightfieldValue = document.getElementById('brightfieldValue');
+        const focusUp = document.getElementById('focusUp');
+        const focusDown = document.getElementById('focusDown');
+        const fluorescentStatus = document.getElementById('fluorescentStatus');
+        const brightfieldStatus = document.getElementById('brightfieldStatus');
+        const focusPositionDisplay = document.getElementById('focusPosition');
+        const wsUrl = document.getElementById('wsUrl');
+        const connectBtn = document.getElementById('connectBtn');
+        const cameraFeed = document.getElementById('cameraFeed');
+        const placeholder = document.getElementById('placeholder');
+        const connectionStatus = document.getElementById('connectionStatus');
+        const cellCountDisplay = document.getElementById('cellCount');
+        const avgCellSizeDisplay = document.getElementById('avgCellSize');
+        const cellDensityDisplay = document.getElementById('cellDensity');
+        const refreshStatsBtn = document.getElementById('refreshStats');
+        const clearStatsBtn = document.getElementById('clearStats');
+
+        fluorescentSwitch.addEventListener('change', function() {
+            if (this.checked) {
+                brightfieldSwitch.checked = false;
+                updateStatus();
+                sendCommand('fluorescent', 'on');
+            } else {
+                updateStatus();
+                sendCommand('fluorescent', 'off');
+            }
+        });
+
+        brightfieldSwitch.addEventListener('change', function() {
+            if (this.checked) {
+                fluorescentSwitch.checked = false;
+                updateStatus();
+                sendCommand('brightfield', 'on');
+            } else {
+                updateStatus();
+                sendCommand('brightfield', 'off');
+            }
+        });
+
+        fluorescentSlider.addEventListener('input', function() {
+            fluorescentValue.textContent = this.value + '%';
+            sendCommand('fluorescent_brightness', this.value);
+        });
+
+        brightfieldSlider.addEventListener('input', function() {
+            brightfieldValue.textContent = this.value + '%';
+            sendCommand('brightfield_brightness', this.value);
+        });
+
+        focusUp.addEventListener('click', function() {
+            focusPosition++;
+            focusPositionDisplay.textContent = focusPosition;
+            sendCommand('focus', 'up');
+        });
+
+        focusDown.addEventListener('click', function() {
+            focusPosition--;
+            focusPositionDisplay.textContent = focusPosition;
+            sendCommand('focus', 'down');
+        });
+
+        function updateStatus() {
+            fluorescentStatus.textContent = fluorescentSwitch.checked ? '开启' : '关闭';
+            fluorescentStatus.style.color = fluorescentSwitch.checked ? '#9b59b6' : '#e74c3c';
+            brightfieldStatus.textContent = brightfieldSwitch.checked ? '开启' : '关闭';
+            brightfieldStatus.style.color = brightfieldSwitch.checked ? '#f39c12' : '#e74c3c';
+        }
+
+        function sendCommand(type, value) {
+            const command = {
+                type: type,
+                value: value,
+                timestamp: Date.now()
+            };
+            
+            if (ws && ws.readyState === WebSocket.OPEN) {
+                ws.send(JSON.stringify(command));
+                console.log('发送命令:', command);
+            } else {
+                console.log('WebSocket未连接，命令未发送:', command);
+            }
+        }
+
+        function updateConnectionStatus(status) {
+            connectionStatus.className = 'connection-status ' + status;
+            switch(status) {
+                case 'connected':
+                    connectionStatus.textContent = '已连接';
+                    break;
+                case 'disconnected':
+                    connectionStatus.textContent = '未连接';
+                    break;
+                case 'connecting':
+                    connectionStatus.textContent = '连接中...';
+                    break;
+            }
+        }
+
+        connectBtn.addEventListener('click', function() {
+            if (ws && ws.readyState === WebSocket.OPEN) {
+                ws.close();
+                return;
+            }
+            connectWebSocket();
+        });
+
+        function connectWebSocket() {
+            const url = wsUrl.value.trim();
+            if (!url) {
+                alert('请输入WebSocket地址');
+                return;
+            }
+
+            updateConnectionStatus('connecting');
+            connectBtn.textContent = '断开';
+
+            try {
+                ws = new WebSocket(url);
+
+                ws.onopen = function() {
+                    console.log('WebSocket连接已建立');
+                    updateConnectionStatus('connected');
+                    placeholder.style.display = 'none';
+                    cameraFeed.style.display = 'block';
+                };
+
+                ws.onmessage = function(event) {
+                    if (event.data instanceof Blob) {
+                        const url = URL.createObjectURL(event.data);
+                        cameraFeed.src = url;
+                        cameraFeed.onload = function() {
+                            URL.revokeObjectURL(url);
+                        };
+                    } else {
+                        try {
+                            const data = JSON.parse(event.data);
+                            if (data.type === 'image' && data.data) {
+                                cameraFeed.src = 'data:image/jpeg;base64,' + data.data;
+                            } else if (data.type === 'cell_stats') {
+                                updateCellStats(data.data);
+                            } else if (data.type === 'status') {
+                                console.log('收到状态更新:', data);
+                            }
+                        } catch (e) {
+                            console.log('解析消息失败:', e);
+                        }
+                    }
+                };
+
+                ws.onerror = function(error) {
+                    console.error('WebSocket错误:', error);
+                    updateConnectionStatus('disconnected');
+                    connectBtn.textContent = '连接';
+                };
+
+                ws.onclose = function() {
+                    console.log('WebSocket连接已关闭');
+                    updateConnectionStatus('disconnected');
+                    placeholder.style.display = 'flex';
+                    cameraFeed.style.display = 'none';
+                    connectBtn.textContent = '连接';
+                    ws = null;
+                };
+            } catch (e) {
+                console.error('连接失败:', e);
+                updateConnectionStatus('disconnected');
+                connectBtn.textContent = '连接';
+            }
+        }
+
+        function initChart() {
+            const ctx = document.getElementById('growthChart').getContext('2d');
+            growthChart = new Chart(ctx, {
+                type: 'line',
+                data: {
+                    labels: [],
+                    datasets: [
+                        {
+                            label: '细胞数量',
+                            data: [],
+                            borderColor: 'rgb(46, 204, 113)',
+                            backgroundColor: 'rgba(46, 204, 113, 0.1)',
+                            fill: true,
+                            tension: 0.4,
+                            yAxisID: 'y'
+                        },
+                        {
+                            label: '平均细胞面积 (μm²)',
+                            data: [],
+                            borderColor: 'rgb(52, 152, 219)',
+                            backgroundColor: 'rgba(52, 152, 219, 0.1)',
+                            fill: false,
+                            tension: 0.4,
+                            yAxisID: 'y1'
+                        }
+                    ]
+                },
+                options: {
+                    responsive: true,
+                    maintainAspectRatio: false,
+                    interaction: {
+                        mode: 'index',
+                        intersect: false
+                    },
+                    plugins: {
+                        legend: {
+                            labels: {
+                                color: '#fff'
+                            }
+                        }
+                    },
+                    scales: {
+                        x: {
+                            ticks: { color: '#aaa' },
+                            grid: { color: 'rgba(255,255,255,0.1)' }
+                        },
+                        y: {
+                            type: 'linear',
+                            display: true,
+                            position: 'left',
+                            ticks: { color: '#aaa' },
+                            grid: { color: 'rgba(255,255,255,0.1)' },
+                            title: {
+                                display: true,
+                                text: '细胞数量',
+                                color: '#2ecc71'
+                            }
+                        },
+                        y1: {
+                            type: 'linear',
+                            display: true,
+                            position: 'right',
+                            ticks: { color: '#aaa' },
+                            grid: { drawOnChartArea: false },
+                            title: {
+                                display: true,
+                                text: '细胞面积 (μm²)',
+                                color: '#3498db'
+                            }
+                        }
+                    }
+                }
+            });
+        }
+
+        function updateCellStats(data) {
+            if (data.count !== undefined) {
+                const countSpan = cellCountDisplay.querySelector('.stat-unit');
+                cellCountDisplay.innerHTML = data.count + '<span class="stat-unit">个</span>';
+            }
+            if (data.avgSize !== undefined) {
+                const sizeSpan = avgCellSizeDisplay.querySelector('.stat-unit');
+                avgCellSizeDisplay.innerHTML = data.avgSize + '<span class="stat-unit">μm²</span>';
+            }
+            if (data.density !== undefined) {
+                const densitySpan = cellDensityDisplay.querySelector('.stat-unit');
+                cellDensityDisplay.innerHTML = data.density + '<span class="stat-unit">个/mm²</span>';
+            }
+            
+            if (data.timestamp && data.count !== undefined) {
+                const time = new Date(data.timestamp).toLocaleTimeString();
+                cellDataHistory.timestamps.push(time);
+                cellDataHistory.counts.push(data.count);
+                cellDataHistory.avgSizes.push(data.avgSize || 0);
+                cellDataHistory.densities.push(data.density || 0);
+                
+                if (cellDataHistory.timestamps.length > 50) {
+                    cellDataHistory.timestamps.shift();
+                    cellDataHistory.counts.shift();
+                    cellDataHistory.avgSizes.shift();
+                    cellDataHistory.densities.shift();
+                }
+                
+                updateChart();
+            }
+        }
+
+        function updateChart() {
+            if (growthChart) {
+                growthChart.data.labels = cellDataHistory.timestamps;
+                growthChart.data.datasets[0].data = cellDataHistory.counts;
+                growthChart.data.datasets[1].data = cellDataHistory.avgSizes;
+                growthChart.update('none');
+            }
+        }
+
+        function addDemoData() {
+            const now = Date.now();
+            const demoData = {
+                count: Math.floor(Math.random() * 50) + 100,
+                avgSize: Math.floor(Math.random() * 100) + 200,
+                density: Math.floor(Math.random() * 50) + 50,
+                timestamp: now
+            };
+            updateCellStats(demoData);
+        }
+
+        refreshStatsBtn.addEventListener('click', function() {
+            sendCommand('get_stats', {});
+            addDemoData();
+        });
+
+        clearStatsBtn.addEventListener('click', function() {
+            cellDataHistory = {
+                timestamps: [],
+                counts: [],
+                avgSizes: [],
+                densities: []
+            };
+            cellCountDisplay.innerHTML = '0<span class="stat-unit">个</span>';
+            avgCellSizeDisplay.innerHTML = '0<span class="stat-unit">μm²</span>';
+            cellDensityDisplay.innerHTML = '0<span class="stat-unit">个/mm²</span>';
+            updateChart();
+        });
+
+        document.addEventListener('DOMContentLoaded', function() {
+            initChart();
+        });
+    </script>
+</body>
+</html>
